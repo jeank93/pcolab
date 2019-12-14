@@ -268,6 +268,6 @@ subprocess.run(
                     universal_newlines = True)
   print(r.stdout)
 
-def setupVNC(ngrok_region = None):
-  if setupSSHD(ngrok_region, True):
+def setupVNC(ngrok_region=None, ngrok_token=None):
+  if setupSSHD(ngrok_region, ngrok_token, True):
     _setupVNC()
