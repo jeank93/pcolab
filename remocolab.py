@@ -119,7 +119,7 @@ def _setupSSHDImpl(ngrok_token, ngrok_region):
   print(f"ssh {ssh_common_options} -L 5901:localhost:5901 -p {port} {user_name}@{hostname}")
   print("✂️"*24)
 
-def setupSSHD(ngrok_region = None, check_gpu_available = False):
+def setupSSHD(ngrok_region=None, ngrok_token=None, check_gpu_available=False):
   if check_gpu_available and not _check_gpu_available():
     return False
 
@@ -127,7 +127,8 @@ def setupSSHD(ngrok_region = None, check_gpu_available = False):
   print("Copy&paste your tunnel authtoken from https://dashboard.ngrok.com/auth")
   print("(You need to sign up for ngrok and login,)")
   #Set your ngrok Authtoken.
-  ngrok_token = getpass.getpass()
+  if not ngrok_token:
+    ngrok_token = getpass.getpass()
 
   if not ngrok_region:
     print("Select your ngrok region:")
@@ -218,6 +219,7 @@ def _setupVNC():
   apt.debfile.DebPackage("turbovnc.deb", cache).install()
 
   _installPkgs(cache, "xfce4", "xfce4-terminal")
+  _installPkgs(cache, "mesa-utils", "chromium-browser", "fonts-noto", "fonts-noto-cjk")
   cache.commit()
 
   vnc_sec_conf_p = pathlib.Path("/etc/turbovncserver-security.conf")
