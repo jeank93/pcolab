@@ -224,19 +224,21 @@ def _setupVNC():
   virtualGL_url = "https://svwh.dl.sourceforge.net/project/virtualgl/{0}/virtualgl_{0}_amd64.deb".format(virtualGL_ver)
   turboVNC_url = "https://svwh.dl.sourceforge.net/project/turbovnc/{0}/turbovnc_{0}_amd64.deb".format(turboVNC_ver)
 
-  _log('Downloading VNC packages...')
-
+  _log('Installing VNC packages...')
   _download(libjpeg_url, "libjpeg-turbo.deb")
   _download(virtualGL_url, "virtualgl.deb")
   _download(turboVNC_url, "turbovnc.deb")
 
-  _log('Installing VNC packages...')
   cache = apt.Cache()
   apt.debfile.DebPackage("libjpeg-turbo.deb", cache).install()
   apt.debfile.DebPackage("virtualgl.deb", cache).install()
   apt.debfile.DebPackage("turbovnc.deb", cache).install()
 
+  _log('Installing desktop environment...')
   _installPkgs(cache, "xfce4", "xfce4-terminal")
+  cache.commit()
+
+  _log('Installing extra packages...')
   _installPkgs(cache, "mesa-utils", "chromium-browser", "fonts-noto", "fonts-noto-cjk", "vim")
   cache.commit()
 
@@ -255,7 +257,7 @@ no-x11-tcp-connections
 
   vncrun_py = pathlib.Path("vncrun.py")
   vncrun_py.write_text("""\
-import subprocess, secrets, pathlib
+import subprocess, secrets, pathlib, time
 
 vnc_passwd = secrets.token_urlsafe()[:8]
 vnc_viewonly_passwd = secrets.token_urlsafe()[:8]
@@ -278,6 +280,7 @@ subprocess.run(
 #Disable screensaver because no one would want it.
 (pathlib.Path.home() / ".xscreensaver").write_text("mode: off\\n")
 
+time.sleep(5)
 subprocess.run(['gsettings', 'set', 'org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9/', 'use-system-font', 'false'], env={'DISPLAY': ':1'})
 subprocess.run(['gsettings', 'set', 'org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9/', 'font', 'Noto Mono 12'], env={'DISPLAY': ':1'})
 """)
