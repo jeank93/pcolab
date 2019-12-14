@@ -38,18 +38,13 @@ def _check_gpu_available():
   gpu_name = _get_gpu_name()
   if gpu_name == None:
     print("This is not a runtime with GPU")
-  elif gpu_name == "Tesla K80":
-    print("Warning! GPU of your assigned virtual machine is Tesla K80.")
-    print("You might get better GPU by reseting the runtime.")
   else:
+    _log('Detected GPU: %s' % gpu_name)
     return True
 
   return IPython.utils.io.ask_yes_no("Do you want to continue? [y/n]")
 
-def _setupSSHDImpl(ngrok_token, ngrok_region, ssh_key):
-  #apt-get update
-  #apt-get upgrade
-
+def _setupSSHDImpl(ngrok_token, ngrok_region):
   _log('Updating packages...')
   cache = apt.Cache()
   cache.update()
@@ -59,30 +54,6 @@ def _setupSSHDImpl(ngrok_token, ngrok_region, ssh_key):
 
   _log('Unminimizing server...')
   subprocess.run(["unminimize"], input = "y\n", check = True, universal_newlines = True)
-
-  _log('Installing SSH server...')
-  _installPkg(cache, "openssh-server")
-  cache.commit()
-
-  #Reset host keys
-  for i in pathlib.Path("/etc/ssh").glob("ssh_host_*_key"):
-    i.unlink()
-  subprocess.run(
-                  ["ssh-keygen", "-A"],
-                  check = True)
-
-  #Prevent ssh session disconnection.
-  with open("/etc/ssh/sshd_config", "a") as f:
-    f.write("\n\nClientAliveInterval 120\n")
-
-  #print("ECDSA key fingerprint of host:")
-  ret = subprocess.run(
-                ["ssh-keygen", "-lvf", "/etc/ssh/ssh_host_ecdsa_key.pub"],
-                stdout = subprocess.PIPE,
-                check = True,
-                universal_newlines = True)
-  #print(ret.stdout)
-
 
   _log('Downloading and installing ngrok...')
   _download("https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip", "ngrok.zip")
@@ -98,46 +69,37 @@ def _setupSSHDImpl(ngrok_token, ngrok_region, ssh_key):
   #print("✂️"*24)
   subprocess.run(["useradd", "-s", "/bin/bash", "-m", user_name])
   subprocess.run(["adduser", user_name, "sudo"], check = True)
-  subprocess.run(["chpasswd"], input = f"root:{root_password}", universal_newlines = True)
-  subprocess.run(["chpasswd"], input = f"{user_name}:{user_password}", universal_newlines = True)
-  subprocess.run(['su', '-c', 'mkdir /home/%s/.ssh' % user_name, user_name])
+  #subprocess.run(["chpasswd"], input = f"root:{root_password}", universal_newlines = True)
+  #subprocess.run(["chpasswd"], input = f"{user_name}:{user_password}", universal_newlines = True)
 
-  with open('/home/%s/.ssh/authorized_keys' % user_name, 'w') as f:
-    f.write(ssh_key.strip())
-    f.close()
 
   with open('/etc/sudoers', 'a') as f:
     f.write('\n%s ALL=(ALL) NOPASSWD: ALL' % user_name)
     f.close()
 
-
-  subprocess.run(["service", "ssh", "restart"])
-
   if not pathlib.Path('/root/.ngrok2/ngrok.yml').exists():
     subprocess.run(["./ngrok", "authtoken", ngrok_token])
 
   _log('Creating ngrok tunnel...')
-  ngrok_proc = subprocess.Popen(["./ngrok", "tcp", "-region", ngrok_region, "22"])
+  ngrok_proc = subprocess.Popen(["./ngrok", "http", "-region", ngrok_region, "6080"])
   time.sleep(2)
   if ngrok_proc.poll() != None:
     raise RuntimeError("Failed to run ngrok. Return code:" + str(ngrok_proc.returncode) + "\nSee runtime log for more info.")
 
   with urllib.request.urlopen("http://localhost:4040/api/tunnels") as response:
-    url = json.load(response)['tunnels'][0]['public_url']
-    m = re.match("tcp://(.+):(\d+)", url)
+    url = json.load(response)['tunnels'][1]['public_url']
 
-  hostname = m.group(1)
-  port = m.group(2)
+  _log('Setting up noVNC...')
+  subprocess.run(['git', 'clone', 'https://github.com/novnc/noVNC.git'])
+  subprocess.Popen(['noVNC/utils/launch.sh', '--vnc', 'localhost:5901'])
 
-  _log(f'Ready for SSH connection: ssh -o StrictHostKeyChecking=accept-new -L 5901:localhost:5901 -p {port} {user_name}@{hostname}')
+  return url
 
-def setupSSHD(ngrok_region=None, ngrok_token=None, ssh_key=None, check_gpu_available=False):
+
+def setupSSHD(ngrok_region=None, ngrok_token=None, check_gpu_available=False):
   if check_gpu_available and not _check_gpu_available():
     return False
 
-  if not ssh_key:
-    _log('SSH key is required.')
-    sys.exit(1)
 
   if not ngrok_token:
     print("Copy&paste your tunnel authtoken from https://dashboard.ngrok.com/auth")
@@ -155,8 +117,8 @@ def setupSSHD(ngrok_region=None, ngrok_token=None, ssh_key=None, check_gpu_avail
     print("in - India (Mumbai)")
     ngrok_region = region = input()
 
-  _setupSSHDImpl(ngrok_token, ngrok_region, ssh_key)
-  return True
+  url = _setupSSHDImpl(ngrok_token, ngrok_region)
+  return url
 
 def _setup_nvidia_gl():
   # Install TESLA DRIVER FOR LINUX X64.
@@ -215,7 +177,7 @@ def _setup_nvidia_gl():
   # You can create /dev/tty0 with "mknod /dev/tty0 c 4 0" but you will get permision denied error.
   subprocess.Popen(["Xorg", "-seat", "seat-1", "-allowMouseOpenFail", "-novtswitch", "-nolisten", "tcp"])
 
-def _setupVNC():
+def _setupVNC(url):
   libjpeg_ver = "2.0.3"
   virtualGL_ver = "2.6.2"
   turboVNC_ver = "2.2.3"
@@ -242,7 +204,6 @@ def _setupVNC():
   _installPkgs(cache, "mesa-utils", "chromium-browser", "fonts-noto", "fonts-noto-cjk", "vim")
   cache.commit()
 
-  _log('Starting VNC server...')
 
   vnc_sec_conf_p = pathlib.Path("/etc/turbovncserver-security.conf")
   vnc_sec_conf_p.write_text("""\
@@ -251,10 +212,12 @@ no-httpd
 no-x11-tcp-connections
 """)
 
+  _log('Installing GPU driver...')
   gpu_name = _get_gpu_name()
   if gpu_name != None:
     _setup_nvidia_gl()
 
+  _log('Starting VNC server...')
   vncrun_py = pathlib.Path("vncrun.py")
   vncrun_py.write_text("""\
 import subprocess, secrets, pathlib, time
@@ -289,9 +252,9 @@ subprocess.run(['gsettings', 'set', 'org.gnome.Terminal.Legacy.Profile:/org/gnom
                     check = True,
                     stdout = subprocess.PIPE,
                     universal_newlines = True)
-  _log('Ready for VNC connection: %s' % r.stdout)
+  _log('Ready! Click here to connect: %s/vnc.html?autoconnect=1&resize=remote&password=%s' % (url, r.stdout))
 
-def setupVNC(ngrok_region=None, ngrok_token=None, ssh_key=None):
+def setupVNC(ngrok_region=None, ngrok_token=None):
   _log('Starting...')
-  if setupSSHD(ngrok_region, ngrok_token, ssh_key, True):
-    _setupVNC()
+  url = setupSSHD(ngrok_region, ngrok_token, True)
+  _setupVNC(url)
