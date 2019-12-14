@@ -263,6 +263,7 @@ def _setupProxy(url):
   proxy3_url = "https://github.com/z3APA3A/3proxy/archive/{0}.tar.gz".format(proxy3_ver)
   
   proxy3_dir = "3proxy-{0}".format(proxy3_ver)
+  proxy3_makefile = "Makefile.Linux"
   proxy3_cfgdir = "/usr/local/etc/3proxy"
   proxy3_cfgfile = os.path.join(proxy3_cfgdir, "3proxy.cfg")
   
@@ -271,9 +272,8 @@ def _setupProxy(url):
   tar = tarfile.open("3proxy.tar.gz", "r:gz")
   tar.extractall()
   tar.close()
-  os.symlink(os.path.join(proxy3_dir, "Makefile.Linux"), os.path.join(proxy3_dir, "Makefile"))
-  subprocess.run(["make", "-C", proxy3_dir])
-  subprocess.run(["sudo", "make", "-C", proxy3_dir, "install"])
+  subprocess.run(["make", "-C", proxy3_dir, "-f", proxy3_makefile])
+  subprocess.run(["sudo", "make", "-C", proxy3_dir, "-f", proxy3_makefile, "install"])
   pathlib.Path(proxy3_cfgdir).mkdir(parents=True, exist_ok=True)
   with open(proxy3_cfgfile, "w+") as f:
     proxy_config = [
