@@ -2,6 +2,7 @@ import apt, apt.debfile
 import pathlib, stat, shutil, urllib.request, subprocess, getpass, time
 import secrets, json, re, sys
 import IPython.utils.io
+import os, tarfile
 
 
 def _log(message):
@@ -81,24 +82,26 @@ def _setupSSHDImpl(ngrok_token, ngrok_region):
     subprocess.run(["./ngrok", "authtoken", ngrok_token])
 
   _log('Creating ngrok tunnel...')
-  ngrok_proc = subprocess.Popen(["./ngrok", "http", "-region", ngrok_region, "6080"])
+  ngrok_proc = subprocess.Popen(["./ngrok", "tcp", "-region", ngrok_region, "1080"])
   time.sleep(2)
   if ngrok_proc.poll() != None:
     raise RuntimeError("Failed to run ngrok. Return code:" + str(ngrok_proc.returncode) + "\nSee runtime log for more info.")
 
   with urllib.request.urlopen("http://localhost:4040/api/tunnels") as response:
-    url = json.load(response)['tunnels'][1]['public_url'].replace('http://', 'https://')
+    url = json.load(response)['tunnels'][1]['public_url']
+    if url.startswith("tcp://"):
+      url = url[len("tcp://"):]
 
-  _log('Setting up noVNC...')
-  subprocess.run(['git', 'clone', 'https://github.com/novnc/noVNC.git'])
-  subprocess.Popen(['noVNC/utils/launch.sh', '--vnc', 'localhost:5901'])
+  #_log('Setting up noVNC...')
+  #subprocess.run(['git', 'clone', 'https://github.com/novnc/noVNC.git'])
+  #subprocess.Popen(['noVNC/utils/launch.sh', '--vnc', 'localhost:5901'])
 
   return url
 
 
 def setupSSHD(ngrok_region=None, ngrok_token=None, check_gpu_available=False):
-  if check_gpu_available and not _check_gpu_available():
-    return False
+  #if check_gpu_available and not _check_gpu_available():
+  #  return False
 
 
   if not ngrok_token:
@@ -254,9 +257,51 @@ subprocess.run(['gsettings', 'set', 'org.gnome.Terminal.Legacy.Profile:/org/gnom
                     universal_newlines = True)
   _log('Ready! Click here to connect: %s/vnc.html?autoconnect=1&resize=remote&password=%s' % (url, r.stdout))
 
-def setupVNC(ngrok_region=None, ngrok_token=None):
+def _setupProxy(url):
+  proxy3_ver = "0.8.13"
+  
+  proxy3_url = "https://github.com/z3APA3A/3proxy/archive/{0}.tar.gz".format(proxy3_ver)
+  
+  proxy3_dir = "3proxy-{0}".format(proxy3_ver)
+  proxy3_cfgfile = "/usr/local/etc/3proxy/3proxy.cfg"
+  
+  _log('Downloading and installing 3proxy...')
+  _download(proxy3_url, "3proxy.tar.gz")
+  tar = tarfile.open("3proxy.tar.gz", "r:gz")
+  tar.extractall()
+  tar.close()
+  os.symlink(os.path.join(proxy3_dir, "Makefile.Linux"), os.path.join(proxy3_dir, "Makefile"))
+  subprocess.run(["make", "-C", proxy3_dir])
+  subprocess.run(["sudo", "make", "-C", proxy3_dir, "install"])
+  with open(proxy3_cfgfile, "w+") as f:
+    proxy_config = [
+      "nserver 8.8.8.8",
+      "daemon",
+      "auth none",
+      "external 0.0.0.0",
+      "internal 0.0.0.0",
+      "flush",
+      "socks -aunp1080"
+    ]
+    f.write("\n".join(proxy_config))
+    f.close()
+  
+  _log('Running the proxy server...')
+  subprocess.run(["sudo", "3proxy", proxy3_cfgfile])
+  
+  _log('Ready!')
+  index = url.find(":")
+  print('Protocol: SOCKS5')
+  if index != -1:
+    print('Server: {0}'.format(url[:index]))
+    print('Port: {0}'.format(url[index+1:]))
+  else:
+    print('Server: {0}'.format(url))
+
+def setupProxy(ngrok_region=None, ngrok_token=None):
   _log('Starting...')
   url = setupSSHD(ngrok_region, ngrok_token, True)
-  _setupVNC(url)
+  #_setupVNC(url)
+  _setupProxy(url)
   while True:
     time.sleep(1)
