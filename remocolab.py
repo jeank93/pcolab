@@ -53,8 +53,8 @@ def _setupSSHDImpl(ngrok_token, ngrok_region):
   #cache.upgrade()
   #cache.commit()
 
-  _log('Unminimizing server...')
-  subprocess.run(["unminimize"], input = "y\n", check = True, universal_newlines = True)
+  #_log('Unminimizing server...')
+  #subprocess.run(["unminimize"], input = "y\n", check = True, universal_newlines = True)
 
   _log('Downloading and installing ngrok...')
   _download("https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip", "ngrok.zip")
