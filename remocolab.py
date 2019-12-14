@@ -87,7 +87,7 @@ def _setupSSHDImpl(ngrok_token, ngrok_region):
     raise RuntimeError("Failed to run ngrok. Return code:" + str(ngrok_proc.returncode) + "\nSee runtime log for more info.")
 
   with urllib.request.urlopen("http://localhost:4040/api/tunnels") as response:
-    url = json.load(response)['tunnels'][1]['public_url'].replace('http://', 'https://')
+    url = json.load(response)['tunnels'][1]['public_url']
 
   _log('Setting up noVNC...')
   subprocess.run(['git', 'clone', 'https://github.com/novnc/noVNC.git'])
@@ -258,3 +258,5 @@ def setupVNC(ngrok_region=None, ngrok_token=None):
   _log('Starting...')
   url = setupSSHD(ngrok_region, ngrok_token, True)
   _setupVNC(url)
+  while True:
+    time.sleep(1)
