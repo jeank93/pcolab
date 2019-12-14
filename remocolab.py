@@ -88,7 +88,7 @@ def _setupSSHDImpl(ngrok_token, ngrok_region):
     raise RuntimeError("Failed to run ngrok. Return code:" + str(ngrok_proc.returncode) + "\nSee runtime log for more info.")
 
   with urllib.request.urlopen("http://localhost:4040/api/tunnels") as response:
-    url = json.load(response)['tunnels'][1]['public_url']
+    url = json.load(response)['tunnels'][0]['public_url']
     if url.startswith("tcp://"):
       url = url[len("tcp://"):]
 
