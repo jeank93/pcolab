@@ -46,12 +46,12 @@ def _check_gpu_available():
   return IPython.utils.io.ask_yes_no("Do you want to continue? [y/n]")
 
 def _setupSSHDImpl(ngrok_token, ngrok_region):
-  _log('Updating packages...')
-  cache = apt.Cache()
-  cache.update()
-  cache.open(None)
-  cache.upgrade()
-  cache.commit()
+  #_log('Updating packages...')
+  #cache = apt.Cache()
+  #cache.update()
+  #cache.open(None)
+  #cache.upgrade()
+  #cache.commit()
 
   _log('Unminimizing server...')
   subprocess.run(["unminimize"], input = "y\n", check = True, universal_newlines = True)
@@ -61,8 +61,8 @@ def _setupSSHDImpl(ngrok_token, ngrok_region):
   shutil.unpack_archive("ngrok.zip")
   pathlib.Path("ngrok").chmod(stat.S_IXUSR)
 
-  root_password = secrets.token_urlsafe()
-  user_password = secrets.token_urlsafe()
+  #root_password = secrets.token_urlsafe()
+  #user_password = secrets.token_urlsafe()
   user_name = "colab"
   #print("✂️"*24)
   #print(f"root password: {root_password}")
@@ -263,7 +263,8 @@ def _setupProxy(url):
   proxy3_url = "https://github.com/z3APA3A/3proxy/archive/{0}.tar.gz".format(proxy3_ver)
   
   proxy3_dir = "3proxy-{0}".format(proxy3_ver)
-  proxy3_cfgfile = "/usr/local/etc/3proxy/3proxy.cfg"
+  proxy3_cfgdir = "/usr/local/etc/3proxy"
+  proxy3_cfgfile = os.path.join(proxy3_cfgdir, "3proxy.cfg")
   
   _log('Downloading and installing 3proxy...')
   _download(proxy3_url, "3proxy.tar.gz")
@@ -273,6 +274,7 @@ def _setupProxy(url):
   os.symlink(os.path.join(proxy3_dir, "Makefile.Linux"), os.path.join(proxy3_dir, "Makefile"))
   subprocess.run(["make", "-C", proxy3_dir])
   subprocess.run(["sudo", "make", "-C", proxy3_dir, "install"])
+  pathlib.Path(proxy3_cfgdir).mkdir(parents=True, exist_ok=True)
   with open(proxy3_cfgfile, "w+") as f:
     proxy_config = [
       "nserver 8.8.8.8",
