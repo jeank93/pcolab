@@ -1,14 +1,18 @@
 import apt, apt.debfile
 import pathlib, stat, shutil, urllib.request, subprocess, getpass, time
-import secrets, json, re
+import secrets, json, re, sys
 import IPython.utils.io
+
+
+def _log(message):
+    print('[%s] %s' % (time.strftime('%H:%M:%S', time.localtime()), message))
+
 
 def _installPkg(cache, name):
   pkg = cache[name]
   if pkg.is_installed:
-    print(f"{name} is already installed")
+    pass
   else:
-    print(f"Install {name}")
     pkg.mark_install()
 
 def _installPkgs(cache, *args):
@@ -42,17 +46,21 @@ def _check_gpu_available():
 
   return IPython.utils.io.ask_yes_no("Do you want to continue? [y/n]")
 
-def _setupSSHDImpl(ngrok_token, ngrok_region):
+def _setupSSHDImpl(ngrok_token, ngrok_region, ssh_key):
   #apt-get update
   #apt-get upgrade
+
+  _log('Updating packages...')
   cache = apt.Cache()
   cache.update()
   cache.open(None)
   cache.upgrade()
   cache.commit()
 
+  _log('Unminimizing server...')
   subprocess.run(["unminimize"], input = "y\n", check = True, universal_newlines = True)
 
+  _log('Installing SSH server...')
   _installPkg(cache, "openssh-server")
   cache.commit()
 
@@ -67,14 +75,16 @@ def _setupSSHDImpl(ngrok_token, ngrok_region):
   with open("/etc/ssh/sshd_config", "a") as f:
     f.write("\n\nClientAliveInterval 120\n")
 
-  print("ECDSA key fingerprint of host:")
+  #print("ECDSA key fingerprint of host:")
   ret = subprocess.run(
                 ["ssh-keygen", "-lvf", "/etc/ssh/ssh_host_ecdsa_key.pub"],
                 stdout = subprocess.PIPE,
                 check = True,
                 universal_newlines = True)
-  print(ret.stdout)
+  #print(ret.stdout)
 
+
+  _log('Downloading and installing ngrok...')
   _download("https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip", "ngrok.zip")
   shutil.unpack_archive("ngrok.zip")
   pathlib.Path("ngrok").chmod(stat.S_IXUSR)
@@ -82,19 +92,31 @@ def _setupSSHDImpl(ngrok_token, ngrok_region):
   root_password = secrets.token_urlsafe()
   user_password = secrets.token_urlsafe()
   user_name = "colab"
-  print("✂️"*24)
-  print(f"root password: {root_password}")
-  print(f"{user_name} password: {user_password}")
-  print("✂️"*24)
+  #print("✂️"*24)
+  #print(f"root password: {root_password}")
+  #print(f"{user_name} password: {user_password}")
+  #print("✂️"*24)
   subprocess.run(["useradd", "-s", "/bin/bash", "-m", user_name])
   subprocess.run(["adduser", user_name, "sudo"], check = True)
   subprocess.run(["chpasswd"], input = f"root:{root_password}", universal_newlines = True)
   subprocess.run(["chpasswd"], input = f"{user_name}:{user_password}", universal_newlines = True)
+  subprocess.run(['su', '-c', 'mkdir /home/%s/.ssh' % user_name, user_name])
+
+  with open('/home/%s/.ssh/authorized_keys' % user_name, 'w') as f:
+    f.write(ssh_key.strip())
+    f.close()
+
+  with open('/etc/sudoers', 'a') as f:
+    f.write('\n%s ALL=(ALL) NOPASSWD: ALL' % user_name)
+    f.close()
+
+
   subprocess.run(["service", "ssh", "restart"])
 
   if not pathlib.Path('/root/.ngrok2/ngrok.yml').exists():
     subprocess.run(["./ngrok", "authtoken", ngrok_token])
 
+  _log('Creating ngrok tunnel...')
   ngrok_proc = subprocess.Popen(["./ngrok", "tcp", "-region", ngrok_region, "22"])
   time.sleep(2)
   if ngrok_proc.poll() != None:
@@ -107,27 +129,19 @@ def _setupSSHDImpl(ngrok_token, ngrok_region):
   hostname = m.group(1)
   port = m.group(2)
 
-  ssh_common_options =  "-o UserKnownHostsFile=/dev/null -o VisualHostKey=yes"
-  print("---")
-  print("Command to connect to the ssh server:")
-  print("✂️"*24)
-  print(f"ssh {ssh_common_options} -p {port} {user_name}@{hostname}")
-  print("✂️"*24)
-  print("---")
-  print("If you use VNC:")
-  print("✂️"*24)
-  print(f"ssh {ssh_common_options} -L 5901:localhost:5901 -p {port} {user_name}@{hostname}")
-  print("✂️"*24)
+  _log(f'Ready for SSH connection: ssh -o StrictHostKeyChecking=accept-new -L 5901:localhost:5901 -p {port} {user_name}@{hostname}')
 
-def setupSSHD(ngrok_region=None, ngrok_token=None, check_gpu_available=False):
+def setupSSHD(ngrok_region=None, ngrok_token=None, ssh_key=None, check_gpu_available=False):
   if check_gpu_available and not _check_gpu_available():
     return False
 
-  print("---")
-  print("Copy&paste your tunnel authtoken from https://dashboard.ngrok.com/auth")
-  print("(You need to sign up for ngrok and login,)")
-  #Set your ngrok Authtoken.
+  if not ssh_key:
+    _log('SSH key is required.')
+    sys.exit(1)
+
   if not ngrok_token:
+    print("Copy&paste your tunnel authtoken from https://dashboard.ngrok.com/auth")
+    print("(You need to sign up for ngrok and login,)")
     ngrok_token = getpass.getpass()
 
   if not ngrok_region:
@@ -141,7 +155,7 @@ def setupSSHD(ngrok_region=None, ngrok_token=None, check_gpu_available=False):
     print("in - India (Mumbai)")
     ngrok_region = region = input()
 
-  _setupSSHDImpl(ngrok_token, ngrok_region)
+  _setupSSHDImpl(ngrok_token, ngrok_region, ssh_key)
   return True
 
 def _setup_nvidia_gl():
@@ -210,17 +224,23 @@ def _setupVNC():
   virtualGL_url = "https://svwh.dl.sourceforge.net/project/virtualgl/{0}/virtualgl_{0}_amd64.deb".format(virtualGL_ver)
   turboVNC_url = "https://svwh.dl.sourceforge.net/project/turbovnc/{0}/turbovnc_{0}_amd64.deb".format(turboVNC_ver)
 
+  _log('Downloading VNC packages...')
+
   _download(libjpeg_url, "libjpeg-turbo.deb")
   _download(virtualGL_url, "virtualgl.deb")
   _download(turboVNC_url, "turbovnc.deb")
+
+  _log('Installing VNC packages...')
   cache = apt.Cache()
   apt.debfile.DebPackage("libjpeg-turbo.deb", cache).install()
   apt.debfile.DebPackage("virtualgl.deb", cache).install()
   apt.debfile.DebPackage("turbovnc.deb", cache).install()
 
   _installPkgs(cache, "xfce4", "xfce4-terminal")
-  _installPkgs(cache, "mesa-utils", "chromium-browser", "fonts-noto", "fonts-noto-cjk")
+  _installPkgs(cache, "mesa-utils", "chromium-browser", "fonts-noto", "fonts-noto-cjk", "vim")
   cache.commit()
+
+  _log('Starting VNC server...')
 
   vnc_sec_conf_p = pathlib.Path("/etc/turbovncserver-security.conf")
   vnc_sec_conf_p.write_text("""\
@@ -239,10 +259,7 @@ import subprocess, secrets, pathlib
 
 vnc_passwd = secrets.token_urlsafe()[:8]
 vnc_viewonly_passwd = secrets.token_urlsafe()[:8]
-print("✂️"*24)
-print("VNC password: {}".format(vnc_passwd))
-print("VNC view only password: {}".format(vnc_viewonly_passwd))
-print("✂️"*24)
+print(vnc_passwd)
 vncpasswd_input = "{0}\\n{1}".format(vnc_passwd, vnc_viewonly_passwd)
 vnc_user_dir = pathlib.Path.home().joinpath(".vnc")
 vnc_user_dir.mkdir(exist_ok=True)
@@ -260,14 +277,18 @@ subprocess.run(
 
 #Disable screensaver because no one would want it.
 (pathlib.Path.home() / ".xscreensaver").write_text("mode: off\\n")
+
+subprocess.run(['gsettings', 'set', 'org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9/', 'use-system-font', 'false'], env={'DISPLAY': ':1'})
+subprocess.run(['gsettings', 'set', 'org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9/', 'font', 'Noto Mono 12'], env={'DISPLAY': ':1'})
 """)
   r = subprocess.run(
                     ["su", "-c", "python3 vncrun.py", "colab"],
                     check = True,
                     stdout = subprocess.PIPE,
                     universal_newlines = True)
-  print(r.stdout)
+  _log('Ready for VNC connection: %s' % r.stdout)
 
-def setupVNC(ngrok_region=None, ngrok_token=None):
-  if setupSSHD(ngrok_region, ngrok_token, True):
+def setupVNC(ngrok_region=None, ngrok_token=None, ssh_key=None):
+  _log('Starting...')
+  if setupSSHD(ngrok_region, ngrok_token, ssh_key, True):
     _setupVNC()
