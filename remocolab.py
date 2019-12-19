@@ -40,8 +40,9 @@ def _setupSSHD(token, region):
 	
 	with urllib.request.urlopen("http://localhost:4040/api/tunnels") as response:
 		url = json.load(response)["tunnels"][-1]["public_url"]
-		if url.startswith("tcp://"):
-			url = url[len("tcp://"):]
+		index = url.find("://")
+		if index != -1:
+			url = url[index + len("://"):]
 	
 	return url, ngrok_proc
 
@@ -71,7 +72,7 @@ def _setupProxy(url, protocol):
 	pathlib.Path(proxy3_cfgdir).mkdir(parents=True, exist_ok=True)
 	with open(proxy3_cfgfile, "w+") as f:
 		proxy_config = [
-			"proxy -aunp1080" if protocol == "HTTP" else "socks -aunp1080"
+			"proxy -a -u -n -p1080" if protocol == "HTTP" else "socks -aunp1080"
 		]
 		f.write("\n".join(proxy_config))
 		f.close()
