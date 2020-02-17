@@ -106,14 +106,14 @@ def setupProxy(token="", region="eu", protocol="SOCKS5"):
 	url, ngrok_proc = _setupSSHD(token, region)
 	proxy3_proc = _setupProxy(url, protocol)
 	
-	try:
-		while True:
-			time.sleep(1)
-	except KeyboardInterrupt:
-		_log("Exiting...")
-		if ngrok_proc.poll() != None:
-			ngrok_proc.kill()
-		_killproc("ngrok")
-		if proxy3_proc.poll() != None:
-			proxy3_proc.kill()
-		_killproc("3proxy")
+# 	try:
+# 		while True:
+# 			time.sleep(1)
+# 	except KeyboardInterrupt:
+# 		_log("Exiting...")
+# 		if ngrok_proc.poll() != None:
+# 			ngrok_proc.kill()
+# 		_killproc("ngrok")
+# 		if proxy3_proc.poll() != None:
+# 			proxy3_proc.kill()
+# 		_killproc("3proxy")
