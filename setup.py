@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(
-    name = "remocolab.py",
+    name = "pcolab.py",
     version = "0.1",
     py_modules = ['remocolab'],
     url = "https://github.com/demotomohiro/remocolab",
