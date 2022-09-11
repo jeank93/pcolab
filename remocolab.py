@@ -47,7 +47,7 @@ def _setupSSHD(token, region):
 	return url, ngrok_proc
 
 def _setupProxy(url, protocol):
-	proxy3_ver = "0.8.13"
+	proxy3_ver = "0.9.4"
 	
 	proxy3_url = "https://github.com/z3APA3A/3proxy/archive/{0}.tar.gz".format(proxy3_ver)
 	
