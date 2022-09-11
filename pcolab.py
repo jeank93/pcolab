@@ -63,8 +63,8 @@ def _setupProxy(url, protocol):
 			tar.extractall()
 		os.remove("3proxy.tar.gz")
 		
-		subprocess.run(["make", "-C", proxy3_dir, "-f", proxy3_makefile], check=True)
-		subprocess.run(["make", "-C", proxy3_dir, "-f", proxy3_makefile, "install"], check=True)
+		#subprocess.run(["make", "-C", proxy3_dir, "-f", proxy3_makefile], check=True)
+		#subprocess.run(["make", "-C", proxy3_dir, "-f", proxy3_makefile, "install"], check=True)
 		shutil.rmtree(proxy3_dir)
 	else:
 		_killproc("3proxy")
